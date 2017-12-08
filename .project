@@ -3,7 +3,6 @@
 	<name>RuleMSXDemo</name>
 	<comment></comment>
 	<projects>
-		<project>EasyMSX</project>
 		<project>RuleMSX</project>
 	</projects>
 	<buildSpec>
