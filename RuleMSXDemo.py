@@ -34,55 +34,59 @@ class RuleMSXDemo:
         condStatusPartFilled = RuleCondition("OrderStatusIsPartFilled", self.StringEqualityEvaluator("OrderStatus","PARTFILLED"))
         condStatusFilled = RuleCondition("OrderStatusIsFilled", self.StringEqualityEvaluator("OrderStatus","FILLED"))
 
-        condUSExchange = RuleCondition("IsUSExchange", self.StringEqualityEvaluator("Exchange","US"))
-        condLNExchange = RuleCondition("IsLNExchange", self.StringEqualityEvaluator("Exchange","LN"))
+        #condUSExchange = RuleCondition("IsUSExchange", self.StringEqualityEvaluator("Exchange","US"))
+        #condLNExchange = RuleCondition("IsLNExchange", self.StringEqualityEvaluator("Exchange","LN"))
 
-        condPercentFilled = RuleCondition("Route50%Filled", self.PercentageFilledEvaluator(50))
+        #condPercentFilled = RuleCondition("Route50%Filled", self.PercentageFilledEvaluator(50))
         
-        actionSetDestBrokerBB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BB"))
-        actionSetDestBrokerBMTB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BMTB"))
-        actionRouteOrder = self.ruleMSX.createAction("RouteOrder", self.RouteOrder())
+        #actionSetDestBrokerBB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BB"))
+        #actionSetDestBrokerBMTB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BMTB"))
+        #actionRouteOrder = self.ruleMSX.createAction("RouteOrder", self.RouteOrder())
+        
         actionSendNewMessage = self.ruleMSX.createAction("SendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber"))
         actionSendAckMessage = self.ruleMSX.createAction("SendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNoAndRouteID"))
         actionSendFillMessage = self.ruleMSX.createAction("SendFillMessage", self.ShowFillEvent())
-        actionShowOrderDetails = self.ruleMSX.createAction("ShowOrderDetails", self.ShowOrderDetails())
-        actionShowRouteDetails = self.ruleMSX.createAction("ShowRouteDetails", self.ShowRouteDetails())
-        actionCancelRoute = self.ruleMSX.createAction("CancelRoute", self.CancelRoute())
+        
+        #actionShowOrderDetails = self.ruleMSX.createAction("ShowOrderDetails", self.ShowOrderDetails())
+        #actionShowRouteDetails = self.ruleMSX.createAction("ShowRouteDetails", self.ShowRouteDetails())
+        #actionCancelRoute = self.ruleMSX.createAction("CancelRoute", self.CancelRoute())
         
         demoRuleSet = self.ruleMSX.createRuleSet("demoRuleSet")
 
         ruleNewOrder = demoRuleSet.addRule("NewOrder")
         ruleNewOrder.addRuleCondition(condStatusNew)
+        ruleNewOrder.addAction(actionSendNewMessage)
         
         ruleWorkingOrder = demoRuleSet.addRule("WorkingOrder")
         ruleWorkingOrder.addRuleCondition(condStatusWorking)
-
+        ruleWorkingOrder.addAction(actionSendAckMessage)
+        
         rulePartFilledOrder = demoRuleSet.addRule("PartFilledOrder")
         rulePartFilledOrder.addRuleCondition(condStatusPartFilled)
-
+        rulePartFilledOrder.addAction(actionSendFillMessage)
+        
         ruleFilledOrder = demoRuleSet.addRule("FilledOrder")
         ruleFilledOrder.addRuleCondition(condStatusFilled)
+        ruleFilledOrder.addAction(actionSendFillMessage)
 
-        ruleSetUSDestBroker = demoRuleSet.addRule("SetUSDestBroker")
-        ruleSetUSDestBroker.addRuleCondition(condUSExchange)
+        #ruleSetUSDestBroker = demoRuleSet.addRule("SetUSDestBroker")
+        #ruleSetUSDestBroker.addRuleCondition(condUSExchange)
+        #ruleSetUSDestBroker.addRuleCondition(condStatusNew)
         
-        ruleRouteOrder = demoRuleSet.addRule("RouteOrder")
+        #ruleRouteOrder = demoRuleSet.addRule("RouteOrder")
+        
         
 
     def processNotification(self,notification):
 
         if notification.category == EasyMSX.NotificationCategory.ORDER:
-            print("\nChange to Order (" + EasyMSX.NotificationType.asText(notification.type) + "): " + notification.source.field("EMSX_SEQUENCE").value())
-            #self.printFieldChanges(notification.fieldChanges)
-            #self.printOrderBlotter()
+            if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
+                print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
+                self.parseOrder(notification.source)
 
-        elif notification.category == EasyMSX.NotificationCategory.ROUTE:
-            print("\nChange to Route (" + EasyMSX.NotificationType.asText(notification.type) + "): " + notification.source.field("EMSX_SEQUENCE").value() + "/" + notification.source.field("EMSX_ROUTE_ID").value())
-            #printFieldChanges(notification.fieldChanges)
-            #printRouteBlotter()
-            
-        notification.consume=True
 
+    def parseOrder(self,o):
+        pass
 
 if __name__ == '__main__':
     
