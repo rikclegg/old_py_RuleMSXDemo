@@ -3,7 +3,8 @@
 from EasyMSX import EasyMSX
 from rulemsx import RuleMSX
 from rulecondition import RuleCondition
-from rule import Rule
+from ruleevaluator import RuleEvaluator
+from action import Action
 
 class RuleMSXDemo:
     
@@ -26,7 +27,38 @@ class RuleMSXDemo:
 
         self.easyMSX.start()
              
-
+    class StringEqualityEvaluator(RuleEvaluator):
+        
+        def __init__(self, dataPointName, targetValue):
+            self.dataPointName = dataPointName
+            self.targetValue = targetValue
+            super().addDependentDataPointName(dataPointName)
+        
+        def evaluate(self,dataSet):
+            dpValue = dataSet.dataPoints[self.dataPointName].getValue()
+            return dpValue==self.targetValue
+        
+    class SendMessageWithDataPointValue(Action):
+        
+        def __init__(self,msgStr, dataPointName):
+            self.msgStr = msgStr
+            self.dataPointName = dataPointName
+            
+        def execute(self,dataSet):
+            dpValue = dataSet.dataPoints[self.dataPointName].getValue()
+            print (self.msgStr + dpValue)
+            
+        
+    class ShowFillEvent(Action):
+        
+        def __init__(self):
+            pass
+        
+        def execute(self,dataSet):
+            dpOrderNo = dataSet.dataPoints["OrderNumber"].getValue()
+            ord = self.easyMSX.orders[dpOrderNo]
+            print("Fill event for: " + dpOrderNo)
+            
     def buildRules(self):
         
         condStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
@@ -75,7 +107,6 @@ class RuleMSXDemo:
         
         #ruleRouteOrder = demoRuleSet.addRule("RouteOrder")
         
-        
 
     def processNotification(self,notification):
 
@@ -86,7 +117,8 @@ class RuleMSXDemo:
 
 
     def parseOrder(self,o):
-        pass
+        
+        
 
 if __name__ == '__main__':
     
