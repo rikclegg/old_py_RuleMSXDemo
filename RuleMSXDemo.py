@@ -5,6 +5,7 @@ from rulemsx import RuleMSX
 from rulecondition import RuleCondition
 from ruleevaluator import RuleEvaluator
 from action import Action
+from datapointsource import DataPointSource
 
 class RuleMSXDemo:
     
@@ -59,6 +60,19 @@ class RuleMSXDemo:
             ord = self.easyMSX.orders[dpOrderNo]
             print("Fill event for: " + dpOrderNo)
             
+    class EMSXFieldDataPointSource(DataPointSource):
+
+        def __init__(self, field):
+            self.source = field
+            field.addNotificationHandler(self.processNotification)
+            
+        def getValue(self):
+            return self.source.value()
+        
+        def processNotification(self, notification):
+            super().setStale()
+            
+            
     def buildRules(self):
         
         condStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
@@ -76,7 +90,7 @@ class RuleMSXDemo:
         #actionRouteOrder = self.ruleMSX.createAction("RouteOrder", self.RouteOrder())
         
         actionSendNewMessage = self.ruleMSX.createAction("SendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber"))
-        actionSendAckMessage = self.ruleMSX.createAction("SendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNoAndRouteID"))
+        actionSendAckMessage = self.ruleMSX.createAction("SendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNumber"))
         actionSendFillMessage = self.ruleMSX.createAction("SendFillMessage", self.ShowFillEvent())
         
         #actionShowOrderDetails = self.ruleMSX.createAction("ShowOrderDetails", self.ShowOrderDetails())
@@ -116,9 +130,16 @@ class RuleMSXDemo:
                 self.parseOrder(notification.source)
 
 
+        
     def parseOrder(self,o):
         
-        
+        newDataSet = self.ruleMSX.createDataSet("DS" + o.field("EMSX_SEQUENCE").value())
+
+        newDataSet.addDataPoint("OrderStatus", self.EMSXFieldDataPointSource(o.field("EMSX_STATUS")))
+        newDataSet.addDataPoint("OrderNumber", self.EMSXFieldDataPointSource(o.field("EMSX_SEQUENCE")))
+
+        self.ruleMSX.ruleSets["demoRuleSet"].execute(newDataSet)
+
 
 if __name__ == '__main__':
     
