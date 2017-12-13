@@ -15,9 +15,6 @@ class RuleMSXDemo:
         self.ruleMSX = RuleMSX()
         print("RuleMSX initialised...")
         
-        print("Create RuleSet...")
-        self.buildRules()
-        print("RuleSet ready...")
         
         print("Initialising EasyMSX...")
         self.easyMSX = EasyMSX()
@@ -25,6 +22,10 @@ class RuleMSXDemo:
         
         self.easyMSX.orders.addNotificationHandler(self.processNotification)
         self.easyMSX.routes.addNotificationHandler(self.processNotification)
+
+        print("Create RuleSet...")
+        self.buildRules()
+        print("RuleSet ready...")
 
         self.easyMSX.start()
              
@@ -52,13 +53,16 @@ class RuleMSXDemo:
         
     class ShowFillEvent(Action):
         
-        def __init__(self):
-            pass
+        def __init__(self, easyMSX):
+            self.easyMSX = easyMSX
         
         def execute(self,dataSet):
             dpOrderNo = dataSet.dataPoints["OrderNumber"].getValue()
-            ord = self.easyMSX.orders[dpOrderNo]
-            print("Fill event for: " + dpOrderNo)
+            o = self.easyMSX.orders.getBySequenceNo(int(dpOrderNo))
+            if int(o.field("EMSX_WORKING").value()) == 0:
+                print("Completed: " + dpOrderNo)
+            else:
+                print("PartFilled: " + dpOrderNo)
             
     class EMSXFieldDataPointSource(DataPointSource):
 
@@ -77,7 +81,7 @@ class RuleMSXDemo:
         
         condStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
         condStatusWorking = RuleCondition("OrderStatusIsWorking", self.StringEqualityEvaluator("OrderStatus","WORKING"))
-        condStatusPartFilled = RuleCondition("OrderStatusIsPartFilled", self.StringEqualityEvaluator("OrderStatus","PARTFILLED"))
+        condStatusPartFilled = RuleCondition("OrderStatusIsPartFilled", self.StringEqualityEvaluator("OrderStatus","PARTFILL"))
         condStatusFilled = RuleCondition("OrderStatusIsFilled", self.StringEqualityEvaluator("OrderStatus","FILLED"))
 
         #condUSExchange = RuleCondition("IsUSExchange", self.StringEqualityEvaluator("Exchange","US"))
@@ -91,7 +95,7 @@ class RuleMSXDemo:
         
         actionSendNewMessage = self.ruleMSX.createAction("SendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber"))
         actionSendAckMessage = self.ruleMSX.createAction("SendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNumber"))
-        actionSendFillMessage = self.ruleMSX.createAction("SendFillMessage", self.ShowFillEvent())
+        actionSendFillMessage = self.ruleMSX.createAction("SendFillMessage", self.ShowFillEvent(self.easyMSX))
         
         #actionShowOrderDetails = self.ruleMSX.createAction("ShowOrderDetails", self.ShowOrderDetails())
         #actionShowRouteDetails = self.ruleMSX.createAction("ShowRouteDetails", self.ShowRouteDetails())
@@ -126,8 +130,18 @@ class RuleMSXDemo:
 
         if notification.category == EasyMSX.NotificationCategory.ORDER:
             if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
-                print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
+            #    print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
+            #if notification.type == EasyMSX.NotificationType.UPDATE or notification.type == EasyMSX.NotificationType.CANCEL or notification.type == EasyMSX.NotificationType.DELETE: 
+            #    print("EasyMSX Event (UPD/CANCEL/DELETE): " + notification.source.field("EMSX_SEQUENCE").value())
                 self.parseOrder(notification.source)
+        
+        if notification.category == EasyMSX.NotificationCategory.ROUTE:
+            if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
+            #    print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
+            #if notification.type == EasyMSX.NotificationType.UPDATE or notification.type == EasyMSX.NotificationType.CANCEL or notification.type == EasyMSX.NotificationType.DELETE: 
+            #    print("EasyMSX Event (UPD/CANCEL/DELETE): " + notification.source.field("EMSX_SEQUENCE").value())
+                self.parseOrder(notification.source)
+            
 
 
         
@@ -147,7 +161,7 @@ if __name__ == '__main__':
     
     input("Press any to terminate")
 
-    print("Terminating...")
+    print("Terminating...\n")
 
     quit()
     
