@@ -33,19 +33,28 @@ class RuleMSXDemo:
     class StringEqualityEvaluator(RuleEvaluator):
         
         def __init__(self, dataPointName, targetValue, additionalDep=None):
+            
+            print("Initializing StringEqualityEvaluator for DataPoint: " + dataPointName)
+
             self.dataPointName = dataPointName
             self.targetValue = targetValue
             super().addDependentDataPointName(dataPointName)
             if not additionalDep==None:
                 super().addDependentDataPointName(additionalDep)
+
+            print("Initialized StringEqualityEvaluator for DataPoint: " + dataPointName)
         
         def evaluate(self,dataSet):
             dpValue = dataSet.dataPoints[self.dataPointName].getValue()
+            print("Evaulated StringEqualityEvaluator for DataPoint: " + self.dataPointName + " of DataSet: " + dataSet.name + " - Returning: " + str(dpValue==self.targetValue))
             return dpValue==self.targetValue
         
     class SendMessageWithDataPointValue(Action):
         
         def __init__(self,msgStr, dataPointName1, dataPointName2=None):
+            
+            print("Initializing SendMessageWithDataPointValue for msg: " + msgStr)
+
             self.msgStr = msgStr
             self.dataPointName1 = dataPointName1
             self.dataPointName2 = dataPointName2
@@ -62,6 +71,7 @@ class RuleMSXDemo:
     class ShowFillEvent(Action):
         
         def __init__(self, easyMSX):
+            print("Initializing ShowFillEvent")
             self.easyMSX = easyMSX
         
         def execute(self,dataSet):
@@ -73,6 +83,7 @@ class RuleMSXDemo:
     class ShowRouteFillEvent(Action):
         
         def __init__(self, easyMSX):
+            print("Initializing ShowRouteFillEvent")
             self.easyMSX = easyMSX
         
         def execute(self,dataSet):
@@ -89,18 +100,23 @@ class RuleMSXDemo:
     class EMSXFieldDataPointSource(DataPointSource):
 
         def __init__(self, field):
+            print("Initializing EMSXFieldDataPointSource for field: " + field.name())
             self.source = field
             field.addNotificationHandler(self.processNotification)
             
         def getValue(self):
+            print("GetValue of EMSXFieldDataPointSource for field: " + self.source.name())
             return self.source.value()
         
         def processNotification(self, notification):
+            print("SetValue of EMSXFieldDataPointSource for field: " + self.source.name())
             super().setStale()
             
             
     def buildRules(self):
         
+        print("Building Rules...")
+
         condOrderStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
         condOrderStatusWorking = RuleCondition("OrderStatusIsWorking", self.StringEqualityEvaluator("OrderStatus","WORKING"))
         condOrderStatusFilled = RuleCondition("OrderStatusIsFilled", self.StringEqualityEvaluator("OrderStatus","FILLED"))
@@ -151,20 +167,26 @@ class RuleMSXDemo:
         ruleFilledRoute.addRuleCondition(condRouteStatusFilled)
         ruleFilledRoute.addAction(actionRouteSendFillMessage)
 
+        print("Rules built.")
+
     def processNotification(self,notification):
 
         if notification.category == EasyMSX.NotificationCategory.ORDER:
             if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
+                print("EasyMSX Notification ORDER -> NEW/INIT_PAINT")
                 self.parseOrder(notification.source)
         
         if notification.category == EasyMSX.NotificationCategory.ROUTE:
             if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
+                print("EasyMSX Notification ROUTE -> NEW/INIT_PAINT")
                 self.parseRoute(notification.source)
             
 
         
     def parseOrder(self,o):
         
+        print("Parse Order: " + o.field("EMSX_SEQUENCE").value())
+
         newDataSet = self.ruleMSX.createDataSet("DS_OR_" + o.field("EMSX_SEQUENCE").value())
 
         newDataSet.addDataPoint("OrderStatus", self.EMSXFieldDataPointSource(o.field("EMSX_STATUS")))
@@ -172,9 +194,12 @@ class RuleMSXDemo:
 
         self.ruleMSX.ruleSets["demoOrderRuleSet"].execute(newDataSet)
 
+        print("Parse Order: " + o.field("EMSX_SEQUENCE").value()+ "...done.")
 
     def parseRoute(self,r):
         
+        print("Parse Route: " + r.field("EMSX_SEQUENCE").value() + r.field("EMSX_ROUTE_ID").value())
+
         newDataSet = self.ruleMSX.createDataSet("DS_RT_" + r.field("EMSX_SEQUENCE").value() + r.field("EMSX_ROUTE_ID").value())
 
         newDataSet.addDataPoint("RouteStatus", self.EMSXFieldDataPointSource(r.field("EMSX_STATUS")))
@@ -185,6 +210,8 @@ class RuleMSXDemo:
 
         self.ruleMSX.ruleSets["demoRouteRuleSet"].execute(newDataSet)
 
+        print("Parse Route: " + r.field("EMSX_SEQUENCE").value() + r.field("EMSX_ROUTE_ID").value() + "...done.")
+
 
 if __name__ == '__main__':
     
@@ -194,5 +221,7 @@ if __name__ == '__main__':
 
     print("Terminating...\n")
 
+    ruleMSXDemo.ruleMSX.stop()
+    
     quit()
     
