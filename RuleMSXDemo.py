@@ -6,13 +6,14 @@ from rulecondition import RuleCondition
 from ruleevaluator import RuleEvaluator
 from action import Action
 from datapointsource import DataPointSource
+import logging
 
 class RuleMSXDemo:
     
     def __init__(self):
 
         print("Initialising RuleMSX...")
-        self.ruleMSX = RuleMSX()
+        self.ruleMSX = RuleMSX(logging.INFO)
         print("RuleMSX initialised...")
         
         
@@ -31,10 +32,12 @@ class RuleMSXDemo:
              
     class StringEqualityEvaluator(RuleEvaluator):
         
-        def __init__(self, dataPointName, targetValue):
+        def __init__(self, dataPointName, targetValue, additionalDep=None):
             self.dataPointName = dataPointName
             self.targetValue = targetValue
             super().addDependentDataPointName(dataPointName)
+            if not additionalDep==None:
+                super().addDependentDataPointName(additionalDep)
         
         def evaluate(self,dataSet):
             dpValue = dataSet.dataPoints[self.dataPointName].getValue()
@@ -42,13 +45,18 @@ class RuleMSXDemo:
         
     class SendMessageWithDataPointValue(Action):
         
-        def __init__(self,msgStr, dataPointName):
+        def __init__(self,msgStr, dataPointName1, dataPointName2=None):
             self.msgStr = msgStr
-            self.dataPointName = dataPointName
+            self.dataPointName1 = dataPointName1
+            self.dataPointName2 = dataPointName2
             
         def execute(self,dataSet):
-            dpValue = dataSet.dataPoints[self.dataPointName].getValue()
-            print (self.msgStr + dpValue)
+            dpValue1 = dataSet.dataPoints[self.dataPointName1].getValue()
+            if not self.dataPointName2 == None:
+                dpValue2 = dataSet.dataPoints[self.dataPointName2].getValue()
+                print (self.msgStr + dpValue1 + "/" + dpValue2)
+            else:
+                print (self.msgStr + dpValue1)
             
         
     class ShowFillEvent(Action):
@@ -59,11 +67,25 @@ class RuleMSXDemo:
         def execute(self,dataSet):
             dpOrderNo = dataSet.dataPoints["OrderNumber"].getValue()
             o = self.easyMSX.orders.getBySequenceNo(int(dpOrderNo))
-            if int(o.field("EMSX_WORKING").value()) == 0:
-                print("Completed: " + dpOrderNo)
-            else:
-                print("PartFilled: " + dpOrderNo)
+            filledAmount = o.field("EMSX_FILLED").value() 
+            print("Order Completed: " + dpOrderNo + "\tFilled: " + filledAmount)
             
+    class ShowRouteFillEvent(Action):
+        
+        def __init__(self, easyMSX):
+            self.easyMSX = easyMSX
+        
+        def execute(self,dataSet):
+            dpOrderNo = dataSet.dataPoints["OrderNumber"].getValue()
+            dpRouteID = dataSet.dataPoints["RouteID"].getValue()
+            dpAmount = dataSet.dataPoints["Amount"].getValue()
+            dpFilled = dataSet.dataPoints["Filled"].getValue()
+            o = self.easyMSX.routes.getBySequenceNoAndId(int(dpOrderNo), int(dpRouteID))
+            if int(o.field("EMSX_WORKING").value()) == 0:
+                print("Route Completed: " + dpOrderNo + "/" + dpRouteID)
+            else:
+                print("Route PartFilled: " + dpOrderNo + "/" + dpRouteID + "\t" + dpFilled + " of " + dpAmount)
+
     class EMSXFieldDataPointSource(DataPointSource):
 
         def __init__(self, field):
@@ -79,87 +101,96 @@ class RuleMSXDemo:
             
     def buildRules(self):
         
-        condStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
-        condStatusWorking = RuleCondition("OrderStatusIsWorking", self.StringEqualityEvaluator("OrderStatus","WORKING"))
-        condStatusPartFilled = RuleCondition("OrderStatusIsPartFilled", self.StringEqualityEvaluator("OrderStatus","PARTFILL"))
-        condStatusFilled = RuleCondition("OrderStatusIsFilled", self.StringEqualityEvaluator("OrderStatus","FILLED"))
+        condOrderStatusNew = RuleCondition("OrderStatusIsNew", self.StringEqualityEvaluator("OrderStatus","NEW"))
+        condOrderStatusWorking = RuleCondition("OrderStatusIsWorking", self.StringEqualityEvaluator("OrderStatus","WORKING"))
+        condOrderStatusFilled = RuleCondition("OrderStatusIsFilled", self.StringEqualityEvaluator("OrderStatus","FILLED"))
 
-        #condUSExchange = RuleCondition("IsUSExchange", self.StringEqualityEvaluator("Exchange","US"))
-        #condLNExchange = RuleCondition("IsLNExchange", self.StringEqualityEvaluator("Exchange","LN"))
+        actionOrderSendNewMessage = self.ruleMSX.createAction("OrderSendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber"))
+        actionOrderSendAckMessage = self.ruleMSX.createAction("OrderSendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Order: ", "OrderNumber"))
+        actionOrderSendFillMessage = self.ruleMSX.createAction("OrderSendFillMessage", self.ShowFillEvent(self.easyMSX))
+        
+        condRouteStatusNew = RuleCondition("RouteStatusIsNew", self.StringEqualityEvaluator("RouteStatus","NEW"))
+        condRouteStatusWorking = RuleCondition("RouteStatusIsWorking", self.StringEqualityEvaluator("RouteStatus","WORKING"))
+        condRouteStatusPartFilled = RuleCondition("RouteStatusIsPartFilled", self.StringEqualityEvaluator("RouteStatus","PARTFILL", "Filled"))
+        condRouteStatusFilled = RuleCondition("RouteStatusIsFilled", self.StringEqualityEvaluator("RouteStatus","FILLED"))
+        
+        actionRouteSendNewMessage = self.ruleMSX.createAction("RouteSendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber", "RouteID"))
+        actionRouteSendAckMessage = self.ruleMSX.createAction("RouteSendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNumber", "RouteID"))
+        actionRouteSendPartFillMessage = self.ruleMSX.createAction("RouteSendPartFillMessage", self.ShowRouteFillEvent(self.easyMSX))
+        actionRouteSendFillMessage = self.ruleMSX.createAction("RouteSendFillMessage", self.ShowRouteFillEvent(self.easyMSX))
 
-        #condPercentFilled = RuleCondition("Route50%Filled", self.PercentageFilledEvaluator(50))
-        
-        #actionSetDestBrokerBB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BB"))
-        #actionSetDestBrokerBMTB = self.ruleMSX.createAction("SetDestBroker", self.SetDestinationBroker("BMTB"))
-        #actionRouteOrder = self.ruleMSX.createAction("RouteOrder", self.RouteOrder())
-        
-        actionSendNewMessage = self.ruleMSX.createAction("SendNewMessage", self.SendMessageWithDataPointValue("New Order Created: ", "OrderNumber"))
-        actionSendAckMessage = self.ruleMSX.createAction("SendAckMessage", self.SendMessageWithDataPointValue("Broker Acknowledged Route: ", "OrderNumber"))
-        actionSendFillMessage = self.ruleMSX.createAction("SendFillMessage", self.ShowFillEvent(self.easyMSX))
-        
-        #actionShowOrderDetails = self.ruleMSX.createAction("ShowOrderDetails", self.ShowOrderDetails())
-        #actionShowRouteDetails = self.ruleMSX.createAction("ShowRouteDetails", self.ShowRouteDetails())
-        #actionCancelRoute = self.ruleMSX.createAction("CancelRoute", self.CancelRoute())
-        
-        demoRuleSet = self.ruleMSX.createRuleSet("demoRuleSet")
+        demoOrderRuleSet = self.ruleMSX.createRuleSet("demoOrderRuleSet")
 
-        ruleNewOrder = demoRuleSet.addRule("NewOrder")
-        ruleNewOrder.addRuleCondition(condStatusNew)
-        ruleNewOrder.addAction(actionSendNewMessage)
+        ruleNewOrder = demoOrderRuleSet.addRule("NewOrder")
+        ruleNewOrder.addRuleCondition(condOrderStatusNew)
+        ruleNewOrder.addAction(actionOrderSendNewMessage)
         
-        ruleWorkingOrder = demoRuleSet.addRule("WorkingOrder")
-        ruleWorkingOrder.addRuleCondition(condStatusWorking)
-        ruleWorkingOrder.addAction(actionSendAckMessage)
+        ruleWorkingOrder = demoOrderRuleSet.addRule("WorkingOrder")
+        ruleWorkingOrder.addRuleCondition(condOrderStatusWorking)
+        ruleWorkingOrder.addAction(actionOrderSendAckMessage)
         
-        rulePartFilledOrder = demoRuleSet.addRule("PartFilledOrder")
-        rulePartFilledOrder.addRuleCondition(condStatusPartFilled)
-        rulePartFilledOrder.addAction(actionSendFillMessage)
+        ruleFilledOrder = demoOrderRuleSet.addRule("FilledOrder")
+        ruleFilledOrder.addRuleCondition(condOrderStatusFilled)
+        ruleFilledOrder.addAction(actionOrderSendFillMessage)
         
-        ruleFilledOrder = demoRuleSet.addRule("FilledOrder")
-        ruleFilledOrder.addRuleCondition(condStatusFilled)
-        ruleFilledOrder.addAction(actionSendFillMessage)
+        demoRouteRuleSet = self.ruleMSX.createRuleSet("demoRouteRuleSet")
 
-        #ruleSetUSDestBroker = demoRuleSet.addRule("SetUSDestBroker")
-        #ruleSetUSDestBroker.addRuleCondition(condUSExchange)
-        #ruleSetUSDestBroker.addRuleCondition(condStatusNew)
+        ruleNewRoute = demoRouteRuleSet.addRule("NewRoute")
+        ruleNewRoute.addRuleCondition(condRouteStatusNew)
+        ruleNewRoute.addAction(actionRouteSendNewMessage)
         
-        #ruleRouteOrder = demoRuleSet.addRule("RouteOrder")
+        ruleWorkingRoute = demoRouteRuleSet.addRule("WorkingRoute")
+        ruleWorkingRoute.addRuleCondition(condRouteStatusWorking)
+        ruleWorkingRoute.addAction(actionRouteSendAckMessage)
         
+        rulePartFilledRoute = demoRouteRuleSet.addRule("PartFilledRoute")
+        rulePartFilledRoute.addRuleCondition(condRouteStatusPartFilled)
+        rulePartFilledRoute.addAction(actionRouteSendPartFillMessage)
+
+        ruleFilledRoute = demoRouteRuleSet.addRule("FilledRoute")
+        ruleFilledRoute.addRuleCondition(condRouteStatusFilled)
+        ruleFilledRoute.addAction(actionRouteSendFillMessage)
 
     def processNotification(self,notification):
 
         if notification.category == EasyMSX.NotificationCategory.ORDER:
             if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
-            #    print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
-            #if notification.type == EasyMSX.NotificationType.UPDATE or notification.type == EasyMSX.NotificationType.CANCEL or notification.type == EasyMSX.NotificationType.DELETE: 
-            #    print("EasyMSX Event (UPD/CANCEL/DELETE): " + notification.source.field("EMSX_SEQUENCE").value())
                 self.parseOrder(notification.source)
         
         if notification.category == EasyMSX.NotificationCategory.ROUTE:
             if notification.type == EasyMSX.NotificationType.NEW or notification.type == EasyMSX.NotificationType.INITIALPAINT: 
-            #    print("EasyMSX Event (NEW/INITALPAINT): " + notification.source.field("EMSX_SEQUENCE").value())
-            #if notification.type == EasyMSX.NotificationType.UPDATE or notification.type == EasyMSX.NotificationType.CANCEL or notification.type == EasyMSX.NotificationType.DELETE: 
-            #    print("EasyMSX Event (UPD/CANCEL/DELETE): " + notification.source.field("EMSX_SEQUENCE").value())
-                self.parseOrder(notification.source)
+                self.parseRoute(notification.source)
             
-
 
         
     def parseOrder(self,o):
         
-        newDataSet = self.ruleMSX.createDataSet("DS" + o.field("EMSX_SEQUENCE").value())
+        newDataSet = self.ruleMSX.createDataSet("DS_OR_" + o.field("EMSX_SEQUENCE").value())
 
         newDataSet.addDataPoint("OrderStatus", self.EMSXFieldDataPointSource(o.field("EMSX_STATUS")))
         newDataSet.addDataPoint("OrderNumber", self.EMSXFieldDataPointSource(o.field("EMSX_SEQUENCE")))
 
-        self.ruleMSX.ruleSets["demoRuleSet"].execute(newDataSet)
+        self.ruleMSX.ruleSets["demoOrderRuleSet"].execute(newDataSet)
+
+
+    def parseRoute(self,r):
+        
+        newDataSet = self.ruleMSX.createDataSet("DS_RT_" + r.field("EMSX_SEQUENCE").value() + r.field("EMSX_ROUTE_ID").value())
+
+        newDataSet.addDataPoint("RouteStatus", self.EMSXFieldDataPointSource(r.field("EMSX_STATUS")))
+        newDataSet.addDataPoint("OrderNumber", self.EMSXFieldDataPointSource(r.field("EMSX_SEQUENCE")))
+        newDataSet.addDataPoint("RouteID", self.EMSXFieldDataPointSource(r.field("EMSX_ROUTE_ID")))
+        newDataSet.addDataPoint("Filled", self.EMSXFieldDataPointSource(r.field("EMSX_FILLED")))
+        newDataSet.addDataPoint("Amount", self.EMSXFieldDataPointSource(r.field("EMSX_AMOUNT")))
+
+        self.ruleMSX.ruleSets["demoRouteRuleSet"].execute(newDataSet)
 
 
 if __name__ == '__main__':
     
     ruleMSXDemo = RuleMSXDemo();
     
-    input("Press any to terminate")
+    input("Press any to terminate\n")
 
     print("Terminating...\n")
 
